@@ -8,5 +8,6 @@ const router = Router();
 router.get('/', auctionController.getAllAuctions);
 router.get('/active', auctionController.getActiveAuctions);
 router.get('/:id', auctionController.getAuctionById);
+router.post('/:id', auctionController.updateAuction);
 
 export default router;
