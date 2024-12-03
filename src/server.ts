@@ -20,7 +20,7 @@ app.use(express.json());
 
 // Routes
 app.use('/auctions', auctionRoutes);
-app.use('/bids', bidRoutes);
+// app.use('/bids', bidRoutes);
 
 // Error handling
 app.use(errorHandler);

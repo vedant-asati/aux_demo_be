@@ -56,7 +56,7 @@ export default function setupWebSocket(server: any) {
 
     if ((timeEnded || maxBidsReached) && !auction.auctionEnded) {
       const winner = auction.bids[0]?.bidderId;
-      
+
       await prisma.auction.update({
         where: { id: Number(auctionId) },
         data: {
@@ -80,6 +80,7 @@ export default function setupWebSocket(server: any) {
     ws.on('message', async (message: string) => {
       try {
         const data: WebSocketMessage = JSON.parse(message);
+        console.log(message);
 
         switch (data.type) {
           case 'JOIN_ROOM': {
@@ -102,7 +103,7 @@ export default function setupWebSocket(server: any) {
                 }
               }
             });
-            
+
             ws.send(JSON.stringify({
               type: 'AUCTION_STATE',
               auction
@@ -118,6 +119,8 @@ export default function setupWebSocket(server: any) {
             const auction = await prisma.auction.findUnique({
               where: { id: Number(data.auctionId) }
             });
+
+            console.log("auction: ", auction);
 
             if (!auction || auction.auctionEnded) {
               throw new Error('Auction not available for bidding');
