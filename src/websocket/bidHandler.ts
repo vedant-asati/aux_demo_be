@@ -1,7 +1,5 @@
-// src/websocket/bidHandler.ts
 import { WebSocket, WebSocketServer } from 'ws';
 import { PrismaClient } from '@prisma/client';
-import { parse } from 'url';
 
 const prisma = new PrismaClient();
 
@@ -24,11 +22,11 @@ export default function setupWebSocket(server: any) {
   const wss = new WebSocketServer({ server });
   const rooms: AuctionRooms = {};
 
-  const broadcastToRoom = (auctionId: string, message: any) => {
+  const broadcastToRoom = (auctionId: string, message: any, sender?: WebSocketClient) => {
     const room = rooms[auctionId];
     if (room) {
       room.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
+        if (client.readyState === WebSocket.OPEN && client !== sender) {
           client.send(JSON.stringify(message));
         }
       });
@@ -80,7 +78,7 @@ export default function setupWebSocket(server: any) {
     ws.on('message', async (message: string) => {
       try {
         const data: WebSocketMessage = JSON.parse(message);
-        console.log(message);
+        console.log("message: ", message);
 
         switch (data.type) {
           case 'JOIN_ROOM': {
@@ -105,7 +103,8 @@ export default function setupWebSocket(server: any) {
             });
 
             ws.send(JSON.stringify({
-              type: 'AUCTION_STATE',
+              type: 'ROOM_JOINED',
+              message: `Successfully joined auction ${auctionId}`,
               auction
             }));
             break;
@@ -120,8 +119,6 @@ export default function setupWebSocket(server: any) {
               where: { id: Number(data.auctionId) }
             });
 
-            console.log("auction: ", auction);
-
             if (!auction || auction.auctionEnded) {
               throw new Error('Auction not available for bidding');
             }
@@ -134,12 +131,21 @@ export default function setupWebSocket(server: any) {
                 timeStamp: new Date()
               }
             });
+            console.log("bid: ", bid);
 
             broadcastToRoom(data.auctionId, {
               type: 'NEW_BID',
               bid
-            });
+            }, ws);
 
+            // Send confirmation to the sender
+            ws.send(JSON.stringify({
+              type: 'BID_CONFIRMED',
+              bid,
+              message: `Your bid of ${data.amount} was placed successfully`
+            }));
+
+            // @DEV Not sure of usage
             await checkAuctionEnd(data.auctionId);
             break;
           }
@@ -147,6 +153,10 @@ export default function setupWebSocket(server: any) {
           case 'LEAVE_ROOM': {
             if (ws.auctionId && rooms[ws.auctionId]) {
               rooms[ws.auctionId].delete(ws);
+              ws.send(JSON.stringify({
+                type: 'ROOM_LEFT',
+                message: `Successfully left auction ${ws.auctionId}`
+              }));
             }
             break;
           }
