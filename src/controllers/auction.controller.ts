@@ -1,9 +1,12 @@
 
 // src/controllers/auction.controller.ts
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { Auction, Bid, Product } from '@prisma/client';
 import type { UpdateAuctionDto } from '../types/auction.types';
+// import { PrismaClient } from '@prisma/client';
+import { authMiddleware } from '../middleware/auth.middleware';
+import { adminMiddleware } from '../middleware/admin.middleware';
 
 const prisma = new PrismaClient();
 
@@ -161,7 +164,7 @@ export const updateAuction = async (req: Request, res: Response) => {
                     // registrations: auctionData.registrations,
                     // powerPlay: auctionData.powerPlay,
                     auctionEnded: auctionData.auctionEnded,
-                    winner: auctionData.winner
+                    winnerId: auctionData.winnerId
                 },
                 include: {
                     bids: true,
@@ -220,3 +223,65 @@ export const updateAuction = async (req: Request, res: Response) => {
         });
     }
 };
+
+export const createNewAuction = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const auctionData: UpdateAuctionDto = req.body;
+        const auction = await prisma.auction.create({
+            // data: {
+            //     ...req.body,
+            //     creatorId: req.user.id, // Added by auth middleware
+            //     productId: Number(req.body.productId),
+            //     auctionStartTime: new Date(req.body.auctionStartTime),
+            //     auctionEndTime: req.body.auctionEndTime ? new Date(req.body.auctionEndTime) : null,
+            //     reservePrice: new Decimal(req.body.reservePrice),
+            //     registrationFees: new Decimal(req.body.registrationFees),
+            //     earnestMoneyDeposit: req.body.earnestMoneyDeposit ? new Decimal(req.body.earnestMoneyDeposit) : null
+            // },
+            // include: {
+            //     product: true
+            // }
+            data: {
+                ...req.body,
+                // name: auctionData.name,
+                // auctionType: auctionData.auctionType as any, // Cast to enum type
+                creatorId: req.body.user.id, // Added by auth middleware
+                // creatorId: auctionData.creatorId,
+                // auctionStartTime: new Date(auctionData.auctionStartTime),
+                // winningCondition: auctionData.winningCondition as any, // Cast to enum type
+                // auctionEndTime: auctionData.auctionEndTime ? new Date(auctionData.auctionEndTime) : null,
+                // maxBids: auctionData.maxBids,
+                // bidType: auctionData.bidType as any, // Cast to enum type
+                // reservePrice: auctionData.reservePrice,
+                // registrationFees: auctionData.registrationFees,
+                // earnestMoneyRequired: auctionData.earnestMoneyRequired,
+                // earnestMoneyDeposit: auctionData.earnestMoneyDeposit,
+                // registrations: auctionData.registrations,
+                // powerPlay: auctionData.powerPlay,
+                // auctionEnded: auctionData.auctionEnded,
+                // winner: auctionData.winner,
+                // bids:auctionData.bids
+            },
+            include: {
+                bids: true,
+                product: true
+            }
+        });
+        res.status(201).json(auction);
+    } catch (error) {
+        next(error);
+    }
+}
+
+export const deleteAuction = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        await prisma.auction.delete({
+            where: { id: Number(req.params.id) }
+        });
+        res.status(204).send();
+    } catch (error) {
+        next(error);
+    }
+}
+
+

@@ -28,7 +28,7 @@ SELECT
 FROM "Auction" a
 WHERE a.name = 'Classic Car Auction';
 
--- Additional sample bids for more activity
+-- Additional sample bids
 INSERT INTO "Bid" ("auctionId", "bidderId", amount, "timeStamp")
 SELECT 
   a.id,
@@ -46,3 +46,22 @@ SELECT
   NOW() - INTERVAL '15 minutes'
 FROM "Auction" a
 WHERE a.name = 'Classic Car Auction';
+
+-- New bids for newer auctions
+INSERT INTO "Bid" ("auctionId", "bidderId", amount, "timeStamp")
+SELECT 
+  a.id,
+  101,
+  125000,
+  NOW() - INTERVAL '3 hours'
+FROM "Auction" a
+WHERE a.name = 'Premium Watch Auction';
+
+INSERT INTO "Bid" ("auctionId", "bidderId", amount, "timeStamp")
+SELECT 
+  a.id,
+  103,
+  185000,
+  NOW() - INTERVAL '2 hours'
+FROM "Auction" a
+WHERE a.name = 'Street Art Special';

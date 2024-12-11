@@ -53,13 +53,25 @@ export default function setupWebSocket(server: any) {
     const maxBidsReached = auction.maxBids && bidCount >= auction.maxBids;
 
     if ((timeEnded || maxBidsReached) && !auction.auctionEnded) {
-      const winner = auction.bids[0]?.bidderId;
+      // @DEV Fix this
+      // const winner = auction.bids[0]?.bidderId;
+
+      const winner = await prisma.user.findUnique({
+        where: { id: Number(auction.bids[0]?.bidderId) },
+        // include: {
+        //   bids: {
+        //     orderBy: {
+        //       amount: 'desc'
+        //     }
+        //   }
+        // }
+      });
 
       await prisma.auction.update({
         where: { id: Number(auctionId) },
         data: {
           auctionEnded: true,
-          winner
+          // winner: winner
         }
       });
 
@@ -72,7 +84,41 @@ export default function setupWebSocket(server: any) {
     }
   };
 
-  wss.on('connection', (ws: WebSocketClient, req) => {
+  const scheduleAuctionNotifications = async () => {
+    const auctions = await prisma.auction.findMany({
+      where: {
+        auctionEnded: false,
+        auctionStartTime: { lte: new Date() },
+      },
+      include: {
+        bids: true
+      }
+    });
+
+    auctions.forEach(auction => {
+      const now = new Date();
+      const startDelay = new Date(auction.auctionStartTime).getTime() - now.getTime();
+      const endDelay = new Date(auction.auctionEndTime || now).getTime() - now.getTime();
+
+      if (startDelay > 0) {
+        setTimeout(() => {
+          broadcastToRoom(auction.id.toString(), {
+            type: 'AUCTION_START',
+            auctionId: auction.id,
+            message: `Auction ${auction.name} has started.`
+          });
+        }, startDelay);
+      }
+
+      if (endDelay > 0) {
+        setTimeout(async () => {
+          await checkAuctionEnd(auction.id.toString());
+        }, endDelay);
+      }
+    });
+  };
+
+  wss.on('connection', (ws: WebSocketClient) => {
     console.log('New WebSocket connection');
 
     ws.on('message', async (message: string) => {
@@ -175,6 +221,8 @@ export default function setupWebSocket(server: any) {
       }
     });
   });
+
+  scheduleAuctionNotifications();
 
   return wss;
 }

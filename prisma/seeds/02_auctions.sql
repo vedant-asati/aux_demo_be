@@ -79,3 +79,58 @@ SELECT
   false
 FROM "Product" p
 WHERE p.name LIKE '%Warhol%';
+
+-- New auctions
+INSERT INTO "Auction" (
+  name, "auctionType", "creatorId", "productId", "createdAt", 
+  "auctionStartTime", "winningCondition", "auctionEndTime", "maxBids",
+  "bidType", "reservePrice", "registrationFees", "earnestMoneyRequired",
+  "earnestMoneyDeposit", "registrations", "powerPlay", "auctionEnded"
+)
+SELECT 
+  'Premium Watch Auction',
+  'DUTCH'::"AuctionType",
+  502,
+  p.id,
+  NOW(),
+  NOW() + INTERVAL '5 days',
+  'HIGHEST_BID'::"WinningCondition",
+  NOW() + INTERVAL '15 days',
+  75,
+  'SEALED'::"BidType",
+  100000,
+  1000,
+  true,
+  10000,
+  0,
+  true,
+  false
+FROM "Product" p
+WHERE p.name LIKE '%Patek%';
+
+INSERT INTO "Auction" (
+  name, "auctionType", "creatorId", "productId", "createdAt", 
+  "auctionStartTime", "winningCondition", "auctionEndTime", "maxBids",
+  "bidType", "reservePrice", "registrationFees", "earnestMoneyRequired",
+  "earnestMoneyDeposit", "registrations", "powerPlay", "auctionEnded"
+)
+SELECT 
+  'Street Art Special',
+  'THE_LAST_PLAY'::"AuctionType",
+  503,
+  p.id,
+  NOW(),
+  NOW() + INTERVAL '4 days',
+  'HIGHEST_BID'::"WinningCondition",
+  NOW() + INTERVAL '12 days',
+  200,
+  'OPEN'::"BidType",
+  180000,
+  750,
+  true,
+  5000,
+  0,
+  false,
+  false
+FROM "Product" p
+WHERE p.name LIKE '%Banksy%';

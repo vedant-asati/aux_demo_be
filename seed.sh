@@ -24,6 +24,8 @@ echo "Running Prisma migrations..."
 npx prisma migrate reset
 
 # Run seed files in order
+# run_sql_file "prisma/seeds/clean.sql"
+run_sql_file "prisma/seeds/00_users.sql"
 run_sql_file "prisma/seeds/01_products.sql"
 run_sql_file "prisma/seeds/02_auctions.sql"
 run_sql_file "prisma/seeds/03_bids.sql"
