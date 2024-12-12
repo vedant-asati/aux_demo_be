@@ -8,6 +8,23 @@ import { Decimal } from '@prisma/client/runtime/library';
 const router = Router();
 const prisma = new PrismaClient();
 
+// Define a type for the expected request body
+interface UpdateProductDto {
+  name?: string;
+  description?: string;
+  category?: string;
+  price?: number | string;
+  photoUrl?: string;
+}
+
+// First create a custom error class
+class ProductDeletionError extends Error {
+  constructor(message: string, public statusCode: number = 400) {
+      super(message);
+      this.name = 'ProductDeletionError';
+  }
+}
+
 router.get('/', async (req, res, next) => {
   try {
     const products = await prisma.product.findMany();
@@ -50,27 +67,68 @@ router.post('/', authMiddleware, adminMiddleware, async (req, res, next) => {
 
 router.put('/:id', authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
-    const product = await prisma.product.update({
-      where: { id: Number(req.params.id) },
-      data: {
-        ...req.body,
-        price: new Decimal(req.body.price)
+      const productId = Number(req.params.id);
+      const updateData: UpdateProductDto = req.body;
+
+      // Only include fields that are actually provided in the request
+      const updateFields: any = {};
+      
+      if (updateData.description !== undefined) updateFields.description = updateData.description;
+      if (updateData.name !== undefined) updateFields.name = updateData.name;
+      if (updateData.category !== undefined) updateFields.category = updateData.category;
+      if (updateData.photoUrl !== undefined) updateFields.photoUrl = updateData.photoUrl;
+      if (updateData.price !== undefined) {
+          updateFields.price = new Decimal(updateData.price.toString());
       }
-    });
-    res.json(product);
+
+      // Always update the updatedAt timestamp
+      updateFields.updatedAt = new Date();
+
+      const product = await prisma.product.update({
+          where: { id: productId },
+          data: updateFields
+      });
+
+      res.json(product);
   } catch (error) {
-    next(error);
+      next(error);
   }
 });
 
+// @DEV The product which is in other auctions cant be deleted
+// Updated delete route
 router.delete('/:id', authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
-    await prisma.product.delete({
-      where: { id: Number(req.params.id) }
-    });
-    res.status(204).send();
+      const productId = Number(req.params.id);
+
+      // Check if product exists in any auctions
+      const productWithAuctions = await prisma.product.findUnique({
+          where: { id: productId },
+          include: {
+              auctions: true
+          }
+      });
+
+      if (!productWithAuctions) {
+          throw new ProductDeletionError('Product not found', 404);
+      }
+
+      if (productWithAuctions.auctions.length > 0) {
+          throw new ProductDeletionError(
+              'Cannot delete product as it is associated with existing auctions. ' +
+              `Product is used in ${productWithAuctions.auctions.length} auction(s).`,
+              409
+          );
+      }
+
+      // If we get here, it's safe to delete
+      await prisma.product.delete({
+          where: { id: productId }
+      });
+
+      res.status(204).send();
   } catch (error) {
-    next(error);
+      next(error);
   }
 });
 

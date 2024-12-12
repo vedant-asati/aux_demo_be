@@ -21,7 +21,7 @@ run_sql_file() {
 # Run migrations first
 echo "Running Prisma migrations..."
 # npx prisma migrate deploy
-npx prisma migrate reset
+# npx prisma migrate reset
 
 # Run seed files in order
 # run_sql_file "prisma/seeds/clean.sql"

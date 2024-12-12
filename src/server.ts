@@ -11,6 +11,7 @@ import { errorHandler } from './middleware/error.middleware';
 import setupWebSocket from './websocket/bidHandler';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
+import authRoutes from './routes/auth.routes';
 
 dotenv.config();
 
@@ -31,6 +32,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Routes
+app.use('/auth', authRoutes);
 app.use('/auctions', auctionRoutes);
 app.use('/bids', bidRoutes);
 app.use('/products', productRoutes);

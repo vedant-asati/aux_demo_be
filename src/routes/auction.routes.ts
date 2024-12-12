@@ -13,11 +13,9 @@ router.get('/', auctionController.getAllAuctions);
 router.get('/active', auctionController.getActiveAuctions);
 router.get('/:id', auctionController.getAuctionById);
 
-// Protected routes (require authentication)
+// Protected routes
 router.post('/', authMiddleware, adminMiddleware, auctionController.createNewAuction);
-
-router.put('/:id', authMiddleware, adminMiddleware,auctionController.updateAuction);
-
-router.delete('/:id', authMiddleware, adminMiddleware,auctionController.deleteAuction);
+router.put('/:id', authMiddleware, adminMiddleware, auctionController.updateAuction);
+router.delete('/:id', authMiddleware, adminMiddleware, auctionController.deleteAuction);
 
 export default router;

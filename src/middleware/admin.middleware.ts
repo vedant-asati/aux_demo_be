@@ -9,7 +9,7 @@ interface AuthRequest extends Request {
 }
 
 export const adminMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
-  if (req.user?.role !== 'ADMIN') {
+  if (req.body.user?.role !== 'ADMIN') {
     return res.status(403).json({ message: 'Admin access required' });
   }
   next();

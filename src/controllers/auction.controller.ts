@@ -7,8 +7,16 @@ import type { UpdateAuctionDto } from '../types/auction.types';
 // import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { adminMiddleware } from '../middleware/admin.middleware';
+import { Decimal } from '@prisma/client/runtime/library';
 
 const prisma = new PrismaClient();
+
+// interface AuthRequest extends Request {
+//     user: {
+//         id: number;
+//         role: string;
+//     };
+// }
 
 export const getAllAuctions = async (req: Request, res: Response) => {
     try {
@@ -125,23 +133,46 @@ export const getActiveAuctions = async (req: Request, res: Response) => {
     }
 };
 
+export const deleteAuction = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id } = req.params;
+        
+        // Use a transaction to ensure all related records are deleted
+        await prisma.$transaction(async (prisma) => {
+            // First delete all bids associated with this auction
+            await prisma.bid.deleteMany({
+                where: {
+                    auctionId: Number(id)
+                }
+            });
+
+            // Then delete the auction itself
+            await prisma.auction.delete({
+                where: {
+                    id: Number(id)
+                }
+            });
+        });
+
+        res.status(204).send();
+    } catch (error) {
+        console.error('Error deleting auction:', error);
+        next(error);
+    }
+};
+
 export const updateAuction = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
         const auctionData: UpdateAuctionDto = req.body;
 
-        // Start a transaction to ensure data consistency
         const updatedAuction = await prisma.$transaction(async (prisma) => {
             // 1. Update the product
             await prisma.product.update({
-                where: { id: auctionData.product.id },
+                where: { id: auctionData.productId },
                 data: {
-                    // name: auctionData.product.name,
-                    // description: auctionData.product.description,
-                    // category: auctionData.product.category,
-                    price: auctionData.product.price,
-                    // photoUrl: auctionData.product.photoUrl,
-                    updatedAt: new Date(auctionData.product.updatedAt)
+                    price: new Decimal(auctionData.product.price.toString()),
+                    updatedAt: new Date()
                 }
             });
 
@@ -149,67 +180,49 @@ export const updateAuction = async (req: Request, res: Response) => {
             const auction = await prisma.auction.update({
                 where: { id: Number(id) },
                 data: {
-                    // name: auctionData.name,
-                    // auctionType: auctionData.auctionType as any, // Cast to enum type
-                    // creatorId: auctionData.creatorId,
-                    // auctionStartTime: new Date(auctionData.auctionStartTime),
-                    // winningCondition: auctionData.winningCondition as any, // Cast to enum type
-                    // auctionEndTime: auctionData.auctionEndTime ? new Date(auctionData.auctionEndTime) : null,
-                    // maxBids: auctionData.maxBids,
-                    // bidType: auctionData.bidType as any, // Cast to enum type
-                    // reservePrice: auctionData.reservePrice,
-                    // registrationFees: auctionData.registrationFees,
-                    // earnestMoneyRequired: auctionData.earnestMoneyRequired,
-                    // earnestMoneyDeposit: auctionData.earnestMoneyDeposit,
-                    // registrations: auctionData.registrations,
-                    // powerPlay: auctionData.powerPlay,
+                    name: auctionData.name,
+                    auctionType: auctionData.auctionType,
+                    auctionStartTime: new Date(auctionData.auctionStartTime),
+                    auctionEndTime: auctionData.auctionEndTime ? new Date(auctionData.auctionEndTime) : null,
+                    winningCondition: auctionData.winningCondition,
+                    maxBids: auctionData.maxBids,
+                    bidType: auctionData.bidType,
+                    reservePrice: new Decimal(auctionData.reservePrice.toString()),
+                    registrationFees: new Decimal(auctionData.registrationFees.toString()),
+                    earnestMoneyRequired: auctionData.earnestMoneyRequired,
+                    earnestMoneyDeposit: auctionData.earnestMoneyDeposit ?
+                        new Decimal(auctionData.earnestMoneyDeposit.toString()) : null,
+                    registrations: auctionData.registrations,
+                    powerPlay: auctionData.powerPlay,
                     auctionEnded: auctionData.auctionEnded,
                     winnerId: auctionData.winnerId
                 },
                 include: {
                     bids: true,
-                    product: true
+                    product: true,
+                    winner: true,
+                    creator: true
                 }
             });
 
-            // 3. Sync bids
-            // First, get all existing bid IDs
-            const existingBids = await prisma.bid.findMany({
-                where: { auctionId: Number(id) },
-                select: { id: true }
-            });
-            const existingBidIds = existingBids.map(bid => bid.id);
-
-            // @DEV Redundant - Not required
-
-            // Find bids to delete (bids that exist in DB but not in incoming data)
-            const incomingBidIds = auctionData.bids.map(bid => bid.id);
-            const bidsToDelete = existingBidIds.filter(id => !incomingBidIds.includes(id));
-
-            // Delete removed bids
-            if (bidsToDelete.length > 0) {
-                await prisma.bid.deleteMany({
-                    where: { id: { in: bidsToDelete } }
-                });
-            }
-
-            // Update or create bids
-            for (const bid of auctionData.bids) {
-                await prisma.bid.upsert({
-                    where: { id: bid.id },
-                    create: {
-                        id: bid.id,
-                        auctionId: Number(id),
-                        bidderId: bid.bidderId,
-                        amount: bid.amount,
-                        timeStamp: new Date(bid.timeStamp)
-                    },
-                    update: {
-                        bidderId: bid.bidderId,
-                        amount: bid.amount,
-                        timeStamp: new Date(bid.timeStamp)
-                    }
-                });
+            // 3. Handle bids
+            if (auctionData.bids) {
+                for (const bid of auctionData.bids) {
+                    await prisma.bid.upsert({
+                        where: { id: bid.id },
+                        create: {
+                            id: bid.id,
+                            auctionId: Number(id),
+                            bidderId: bid.bidderId,
+                            amount: new Decimal(bid.amount.toString()),
+                            timeStamp: new Date(bid.timeStamp)
+                        },
+                        update: {
+                            amount: new Decimal(bid.amount.toString()),
+                            timeStamp: new Date(bid.timeStamp)
+                        }
+                    });
+                }
             }
 
             return auction;
@@ -227,61 +240,36 @@ export const updateAuction = async (req: Request, res: Response) => {
 export const createNewAuction = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const auctionData: UpdateAuctionDto = req.body;
+
         const auction = await prisma.auction.create({
-            // data: {
-            //     ...req.body,
-            //     creatorId: req.user.id, // Added by auth middleware
-            //     productId: Number(req.body.productId),
-            //     auctionStartTime: new Date(req.body.auctionStartTime),
-            //     auctionEndTime: req.body.auctionEndTime ? new Date(req.body.auctionEndTime) : null,
-            //     reservePrice: new Decimal(req.body.reservePrice),
-            //     registrationFees: new Decimal(req.body.registrationFees),
-            //     earnestMoneyDeposit: req.body.earnestMoneyDeposit ? new Decimal(req.body.earnestMoneyDeposit) : null
-            // },
-            // include: {
-            //     product: true
-            // }
             data: {
-                ...req.body,
-                // name: auctionData.name,
-                // auctionType: auctionData.auctionType as any, // Cast to enum type
-                creatorId: req.body.user.id, // Added by auth middleware
-                // creatorId: auctionData.creatorId,
-                // auctionStartTime: new Date(auctionData.auctionStartTime),
-                // winningCondition: auctionData.winningCondition as any, // Cast to enum type
-                // auctionEndTime: auctionData.auctionEndTime ? new Date(auctionData.auctionEndTime) : null,
-                // maxBids: auctionData.maxBids,
-                // bidType: auctionData.bidType as any, // Cast to enum type
-                // reservePrice: auctionData.reservePrice,
-                // registrationFees: auctionData.registrationFees,
-                // earnestMoneyRequired: auctionData.earnestMoneyRequired,
-                // earnestMoneyDeposit: auctionData.earnestMoneyDeposit,
-                // registrations: auctionData.registrations,
-                // powerPlay: auctionData.powerPlay,
-                // auctionEnded: auctionData.auctionEnded,
-                // winner: auctionData.winner,
-                // bids:auctionData.bids
+                name: auctionData.name,
+                auctionType: auctionData.auctionType,
+                creatorId: req.body.user?.id, // Assuming user is set by auth middleware
+                productId: auctionData.productId,
+                auctionStartTime: new Date(auctionData.auctionStartTime),
+                winningCondition: auctionData.winningCondition,
+                auctionEndTime: auctionData.auctionEndTime ? new Date(auctionData.auctionEndTime) : null,
+                maxBids: auctionData.maxBids,
+                bidType: auctionData.bidType,
+                reservePrice: new Decimal(auctionData.reservePrice.toString()),
+                registrationFees: new Decimal(auctionData.registrationFees.toString()),
+                earnestMoneyRequired: auctionData.earnestMoneyRequired,
+                earnestMoneyDeposit: auctionData.earnestMoneyDeposit ?
+                    new Decimal(auctionData.earnestMoneyDeposit.toString()) : null,
+                registrations: 0, // Start with 0 registrations
+                powerPlay: auctionData.powerPlay ?? false,
+                auctionEnded: false // New auctions start as not ended
             },
             include: {
                 bids: true,
-                product: true
+                product: true,
+                creator: true
             }
         });
+
         res.status(201).json(auction);
     } catch (error) {
         next(error);
     }
-}
-
-export const deleteAuction = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        await prisma.auction.delete({
-            where: { id: Number(req.params.id) }
-        });
-        res.status(204).send();
-    } catch (error) {
-        next(error);
-    }
-}
-
-
+};

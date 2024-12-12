@@ -22,6 +22,7 @@ export const createBid = async (req: Request, res: Response) => {
     const bid = await prisma.bid.create({
       data: {
         auctionId,
+        // @DEV Take bidderid using auth. No need to take input.
         bidderId,
         amount
       }
