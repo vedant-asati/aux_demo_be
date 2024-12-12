@@ -1,13 +1,22 @@
 import { Auction, Bid, Product, AuctionType, BidType, WinningCondition } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
+import WebSocket from 'ws';
 
 export interface WebSocketMessage {
-    type: 'BID' | 'NEW_BID' | 'ERROR' | 'ROOM_JOINED' | 'ROOM_LEFT' | 'AUCTION_START' | 'AUCTION_END';
+    type: 'JOIN_ROOM' | 'LEAVE_ROOM' | 'BID' | 'NEW_BID' | 'ERROR' | 'ROOM_JOINED' | 'ROOM_LEFT' | 'AUCTION_START' | 'AUCTION_END';
     auctionId?: number;
     bidderId?: number;
     amount?: number;
     bid?: Bid;
     message?: string;
+}
+
+export interface WebSocketClient extends WebSocket {
+    auctionId?: number;
+}
+
+export interface AuctionRooms {
+    [key: string]: Set<WebSocketClient>;
 }
 
 // Base auction update DTO
@@ -53,4 +62,12 @@ export interface AuctionWithBidsAndProduct extends Auction {
 export interface MinimalUser {
     id: number;
     name: string;
+}
+
+export interface UpdateProductDto {
+    name?: string;
+    description?: string;
+    category?: string;
+    price?: number | string;
+    photoUrl?: string;
 }

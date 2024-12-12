@@ -1,29 +1,13 @@
-// src/routes/product.routes.ts
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { adminMiddleware } from '../middleware/admin.middleware';
 import { Decimal } from '@prisma/client/runtime/library';
+import { UpdateProductDto } from '../types/auction.types';
+import { ProductDeletionError } from '../middleware/error.middleware';
 
 const router = Router();
 const prisma = new PrismaClient();
-
-// Define a type for the expected request body
-interface UpdateProductDto {
-  name?: string;
-  description?: string;
-  category?: string;
-  price?: number | string;
-  photoUrl?: string;
-}
-
-// First create a custom error class
-class ProductDeletionError extends Error {
-  constructor(message: string, public statusCode: number = 400) {
-      super(message);
-      this.name = 'ProductDeletionError';
-  }
-}
 
 router.get('/', async (req, res, next) => {
   try {
@@ -95,28 +79,27 @@ router.put('/:id', authMiddleware, adminMiddleware, async (req, res, next) => {
   }
 });
 
-// @DEV The product which is in other auctions cant be deleted
-// Updated delete route
 router.delete('/:id', authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
-      const productId = Number(req.params.id);
-
-      // Check if product exists in any auctions
-      const productWithAuctions = await prisma.product.findUnique({
-          where: { id: productId },
-          include: {
+    const productId = Number(req.params.id);
+    
+    // Check if product exists in any auctions
+    const productWithAuctions = await prisma.product.findUnique({
+      where: { id: productId },
+      include: {
               auctions: true
           }
       });
 
       if (!productWithAuctions) {
-          throw new ProductDeletionError('Product not found', 404);
+        throw new ProductDeletionError('Product not found', 404);
       }
-
+      
+      // @DEV The product which is in other auctions cant be deleted
       if (productWithAuctions.auctions.length > 0) {
-          throw new ProductDeletionError(
-              'Cannot delete product as it is associated with existing auctions. ' +
-              `Product is used in ${productWithAuctions.auctions.length} auction(s).`,
+        throw new ProductDeletionError(
+          'Cannot delete product as it is associated with existing auctions. ' +
+          `Product is used in ${productWithAuctions.auctions.length} auction(s).`,
               409
           );
       }

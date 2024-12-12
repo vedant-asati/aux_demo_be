@@ -1,12 +1,9 @@
-// src/routes/auction.routes.ts
 import { Router } from 'express';
 import * as auctionController from '../controllers/auction.controller';
-// import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { adminMiddleware } from '../middleware/admin.middleware';
 
 const router = Router();
-// const prisma = new PrismaClient();
 
 // Public routes
 router.get('/', auctionController.getAllAuctions);

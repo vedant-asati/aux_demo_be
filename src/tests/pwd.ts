@@ -1,7 +1,5 @@
-// Import bcrypt library
 const bcrypt = require('bcrypt');
 
-// Define the users and their plaintext passwords
 const users = [
     {
         email: 'intruder@gmail.com',
@@ -58,8 +56,7 @@ async function verifyPasswords(users: any) {
         // const hashedPassword = await bcrypt.hash(user.plaintextPassword, 10);
         // user.hashedPassword = hashedPassword;
     }
-    // console.log("users: ", users);
+    console.log("users: ", users);
 }
 
-// Run the verification
 verifyPasswords(users).catch(err => console.error('Error verifying passwords:', err));

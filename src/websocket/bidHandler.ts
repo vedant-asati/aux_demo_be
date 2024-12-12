@@ -1,28 +1,15 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { PrismaClient } from '@prisma/client';
+import { WebSocketMessage, AuctionRooms, WebSocketClient } from '../types/auction.types';
 
 const prisma = new PrismaClient();
-
-interface WebSocketClient extends WebSocket {
-  auctionId?: string;
-}
-
-interface AuctionRooms {
-  [key: string]: Set<WebSocketClient>;
-}
-
-interface WebSocketMessage {
-  type: 'BID' | 'JOIN_ROOM' | 'LEAVE_ROOM';
-  auctionId: string;
-  bidderId?: number;
-  amount?: string;
-}
 
 export default function setupWebSocket(server: any) {
   const wss = new WebSocketServer({ server });
   const rooms: AuctionRooms = {};
 
-  const broadcastToRoom = (auctionId: string, message: any, sender?: WebSocketClient) => {
+  // Sends to all other clients in the room except sender
+  const broadcastToRoom = (auctionId: number, message: any, sender?: WebSocketClient) => {
     const room = rooms[auctionId];
     if (room) {
       room.forEach(client => {
@@ -33,7 +20,7 @@ export default function setupWebSocket(server: any) {
     }
   };
 
-  const checkAuctionEnd = async (auctionId: string) => {
+  const checkAuctionEnd = async (auctionId: number) => {
     const auction = await prisma.auction.findUnique({
       where: { id: Number(auctionId) },
       include: {
@@ -71,7 +58,7 @@ export default function setupWebSocket(server: any) {
         where: { id: Number(auctionId) },
         data: {
           auctionEnded: true,
-          // winner: winner
+          winnerId: winner?.id
         }
       });
 
@@ -102,7 +89,7 @@ export default function setupWebSocket(server: any) {
 
       if (startDelay > 0) {
         setTimeout(() => {
-          broadcastToRoom(auction.id.toString(), {
+          broadcastToRoom(auction.id, {
             type: 'AUCTION_START',
             auctionId: auction.id,
             message: `Auction ${auction.name} has started.`
@@ -112,7 +99,7 @@ export default function setupWebSocket(server: any) {
 
       if (endDelay > 0) {
         setTimeout(async () => {
-          await checkAuctionEnd(auction.id.toString());
+          await checkAuctionEnd(auction.id);
         }, endDelay);
       }
     });
@@ -125,11 +112,12 @@ export default function setupWebSocket(server: any) {
       try {
         const data: WebSocketMessage = JSON.parse(message);
         console.log("message: ", message);
+        if (!data.auctionId) return;
 
         switch (data.type) {
           case 'JOIN_ROOM': {
             const auctionId = data.auctionId;
-            ws.auctionId = auctionId;
+            ws.auctionId = auctionId as number;
 
             if (!rooms[auctionId]) {
               rooms[auctionId] = new Set();
@@ -178,12 +166,17 @@ export default function setupWebSocket(server: any) {
               }
             });
             console.log("bid: ", bid);
-
-            broadcastToRoom(data.auctionId, {
-              type: 'NEW_BID',
-              bid
-            }, ws);
-
+            if (auction.bidType === 'OPEN') {
+              broadcastToRoom(data.auctionId, {
+                type: 'NEW_BID',
+                bid
+              }, ws);
+            }
+            else {
+              broadcastToRoom(data.auctionId, {
+                type: 'NEW_BID',
+              }, ws);
+            }
             // Send confirmation to the sender
             ws.send(JSON.stringify({
               type: 'BID_CONFIRMED',
@@ -191,7 +184,7 @@ export default function setupWebSocket(server: any) {
               message: `Your bid of ${data.amount} was placed successfully`
             }));
 
-            // @DEV Not sure of usage
+            // @DEV Not sure of its usage here
             await checkAuctionEnd(data.auctionId);
             break;
           }

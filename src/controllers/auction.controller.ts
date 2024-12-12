@@ -1,22 +1,9 @@
-
-// src/controllers/auction.controller.ts
 import { NextFunction, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { Auction, Bid, Product } from '@prisma/client';
 import type { UpdateAuctionDto } from '../types/auction.types';
-// import { PrismaClient } from '@prisma/client';
-import { authMiddleware } from '../middleware/auth.middleware';
-import { adminMiddleware } from '../middleware/admin.middleware';
 import { Decimal } from '@prisma/client/runtime/library';
 
 const prisma = new PrismaClient();
-
-// interface AuthRequest extends Request {
-//     user: {
-//         id: number;
-//         role: string;
-//     };
-// }
 
 export const getAllAuctions = async (req: Request, res: Response) => {
     try {
