@@ -5,6 +5,8 @@ import { Decimal } from '@prisma/client/runtime/library';
 
 const prisma = new PrismaClient();
 
+// @DEV Migrate logic to Auction Service
+
 export const getAllAuctions = async (req: Request, res: Response) => {
     try {
         const auctions = await prisma.auction.findMany({

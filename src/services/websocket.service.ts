@@ -8,7 +8,6 @@ import { v4 as uuidv4 } from 'uuid';
 const prisma = new PrismaClient();
 
 export class WebSocketService {
-    // private static instance: WebSocketService;
     private static instance: WebSocketService | null = null;
     private wss!: WebSocketServer;
     private rooms: AuctionRooms = {};
@@ -53,7 +52,7 @@ export class WebSocketService {
         const room = this.rooms[auctionId];
         if (room) {
             room.forEach(client => {
-                console.log("Client in auctionroom: ", client.auctionId);
+                // console.log("Client in auctionroom: ", client.auctionId);
                 if (client.readyState === WebSocket.OPEN && client !== sender) {
                     client.send(JSON.stringify(message));
                 }
@@ -62,36 +61,32 @@ export class WebSocketService {
     }
 
     private async handleBid(data: WebSocketMessage, ws: WebSocketClient) {
-        if (!data.auctionId || !data.bidderId || !data.amount) {
-            throw new Error('Invalid bid data');
-        }
-
-        const auction = await AuctionService.getAuctionWithBids(data.auctionId);
-        if (!auction || auction.auctionEnded) {
-            throw new Error('Auction not available for bidding');
-        }
-
-        const bid = await AuctionService.placeBid(data.auctionId, data.bidderId, data.amount);
+        try {
+            const auction = await AuctionService.getAuctionWithBids(data.auctionId!);
+            const bid = await AuctionService.placeBid(data.auctionId!, data.bidderId!, data.amount!);
 
         // Send bid confirmation to the bidder
-        ws.send(JSON.stringify({
-            type: 'BID_CONFIRMED',
-            bid,
-            message: `Your bid of ${data.amount} was placed successfully`
-        }));
+            ws.send(JSON.stringify({
+                type: 'BID_CONFIRMED',
+                bid,
+                message: `Your bid of ${data.amount} was placed successfully`
+            }));
 
         // Broadcast to others based on bid type
-        const broadcastMessage: WebSocketMessage = {
-            type: 'NEW_BID',
-            ...(auction.bidType === 'OPEN' ? { bid } : {})
-        };
+            const broadcastMessage: WebSocketMessage = {
+                type: 'NEW_BID',
+                ...(auction.bidType === 'OPEN' ? { bid } : {})
+            };
 
-        this.broadcastToRoom(data.auctionId, broadcastMessage, ws);
-        await this.checkAuctionEnd(data.auctionId);
+            this.broadcastToRoom(data.auctionId!, broadcastMessage, ws);
+            await this.checkAuctionEnd(data.auctionId!);
+        } catch (error) {
+            throw error;
+        }
     }
 
     private async checkAuctionEnd(auctionId: number) {
-        console.log("Checking: ", auctionId);
+        // console.log("Checking: ", auctionId);
         const auction = await AuctionService.getAuctionWithBids(auctionId);
         if (!auction || auction.auctionEnded) return;
 
@@ -110,10 +105,10 @@ export class WebSocketService {
                 type: 'AUCTION_END',
                 auctionId,
                 winner: result.winner,
-                winningBid: result.winningBid
+                winningBid: result.winningBid!
             });
         }
-        console.log("Checked: ", auctionId);
+        // console.log("Checked: ", auctionId);
     }
 
     // This is when server starts
@@ -151,7 +146,7 @@ export class WebSocketService {
 
     private initialize() {
         this.wss.on('connection', (ws: WebSocketClient, req: IncomingMessage) => {
-            // @DEV Fix type if needed
+            // Custom type to uniquely identify ws client
             ws.clientId = uuidv4();
             const ip = req.socket.address();
 
