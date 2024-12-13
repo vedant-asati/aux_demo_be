@@ -3,8 +3,8 @@ import { createBid } from '../controllers/bid.controller';
 
 const router = Router();
 
+// Public Routes
 router.post('/', createBid);
-
 router.get('/', (req,res)=>{
     res.send(200);
 });

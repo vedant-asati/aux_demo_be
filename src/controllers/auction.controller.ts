@@ -123,7 +123,7 @@ export const getActiveAuctions = async (req: Request, res: Response) => {
 export const deleteAuction = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
-        
+
         // Use a transaction to ensure all related records are deleted
         await prisma.$transaction(async (prisma) => {
             // First delete all bids associated with this auction
@@ -254,6 +254,15 @@ export const createNewAuction = async (req: Request, res: Response, next: NextFu
                 creator: true
             }
         });
+
+        // Schedule notifications for the new auction
+        // console.log("Scheduling ws notif...");
+        // console.log(Date.now().toLocaleString());
+        // const wsService = getWebSocketService();
+        // console.log("wsService: ", wsService);
+        // wsService.scheduleNewAuction(auction);
+        // console.log(Date.now().toLocaleString());
+        // console.log("Scheduled ws notif...");
 
         res.status(201).json(auction);
     } catch (error) {

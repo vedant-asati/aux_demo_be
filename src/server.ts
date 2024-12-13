@@ -7,7 +7,7 @@ import auctionRoutes from './routes/auction.routes';
 import bidRoutes from './routes/bid.routes';
 import productRoutes from './routes/product.routes';
 import { errorHandler } from './middleware/error.middleware';
-import setupWebSocket from './websocket/bidHandler';
+import setupWebSocket from './websocket';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import authRoutes from './routes/auth.routes';
