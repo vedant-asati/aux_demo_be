@@ -34,3 +34,15 @@ export interface WebSocketMessage {
   winner?: User;
   winningBid?: Bid;
 }
+
+export interface AuthenticatedWebSocketClient extends WebSocketClient {
+  userId?: number;
+  isAdmin?: boolean;
+}
+
+export interface UserSocketMap {
+  [userId: number]: {
+      socket: AuthenticatedWebSocketClient;
+      rooms: Set<number>;
+  };
+}

@@ -1,9 +1,10 @@
 import WebSocket, { WebSocketServer } from 'ws';
-import { WebSocketClient, AuctionRooms, WebSocketMessage } from '../types/websocket.types';
+import { WebSocketClient, AuctionRooms, WebSocketMessage, AuthenticatedWebSocketClient, UserSocketMap } from '../types/websocket.types';
 import { AuctionService } from './auction.service';
 import { Auction, PrismaClient } from '@prisma/client';
 import { IncomingMessage } from 'http';
 import { v4 as uuidv4 } from 'uuid';
+import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 
@@ -11,6 +12,7 @@ export class WebSocketService {
     private static instance: WebSocketService | null = null;
     private wss!: WebSocketServer;
     private rooms: AuctionRooms = {};
+    private userSockets: UserSocketMap = {};
 
     constructor(server: any) {
         if (WebSocketService.instance) {
@@ -48,11 +50,11 @@ export class WebSocketService {
         }
     }
 
-    private broadcastToRoom(auctionId: number, message: WebSocketMessage, sender?: WebSocketClient) {
+    public broadcastToRoom(auctionId: number, message: WebSocketMessage, sender?: WebSocketClient) {
         const room = this.rooms[auctionId];
         if (room) {
             room.forEach(client => {
-                // console.log("Client in auctionroom: ", client.auctionId);
+                console.log("Client in auctionroom: ", client.auctionId);
                 if (client.readyState === WebSocket.OPEN && client !== sender) {
                     client.send(JSON.stringify(message));
                 }
@@ -61,32 +63,36 @@ export class WebSocketService {
     }
 
     private async handleBid(data: WebSocketMessage, ws: WebSocketClient) {
-        try {
-            const auction = await AuctionService.getAuctionWithBids(data.auctionId!);
-            const bid = await AuctionService.placeBid(data.auctionId!, data.bidderId!, data.amount!);
+        if (!data.auctionId || !data.bidderId || !data.amount) {
+            throw new Error('Invalid bid data');
+        }
+
+        const auction = await AuctionService.getAuctionWithBids(data.auctionId);
+        if (!auction || auction.auctionEnded) {
+            throw new Error('Auction not available for bidding');
+        }
+
+        const bid = await AuctionService.placeBid(data.auctionId, data.bidderId, data.amount);
 
         // Send bid confirmation to the bidder
-            ws.send(JSON.stringify({
-                type: 'BID_CONFIRMED',
-                bid,
-                message: `Your bid of ${data.amount} was placed successfully`
-            }));
+        ws.send(JSON.stringify({
+            type: 'BID_CONFIRMED',
+            bid,
+            message: `Your bid of ${data.amount} was placed successfully`
+        }));
 
         // Broadcast to others based on bid type
-            const broadcastMessage: WebSocketMessage = {
-                type: 'NEW_BID',
-                ...(auction.bidType === 'OPEN' ? { bid } : {})
-            };
+        const broadcastMessage: WebSocketMessage = {
+            type: 'NEW_BID',
+            ...(auction.bidType === 'OPEN' ? { bid } : {})
+        };
 
-            this.broadcastToRoom(data.auctionId!, broadcastMessage, ws);
-            await this.checkAuctionEnd(data.auctionId!);
-        } catch (error) {
-            throw error;
-        }
+        this.broadcastToRoom(data.auctionId, broadcastMessage, ws);
+        await this.checkAuctionEnd(data.auctionId);
     }
 
     private async checkAuctionEnd(auctionId: number) {
-        // console.log("Checking: ", auctionId);
+        console.log("Checking: ", auctionId);
         const auction = await AuctionService.getAuctionWithBids(auctionId);
         if (!auction || auction.auctionEnded) return;
 
@@ -108,7 +114,61 @@ export class WebSocketService {
                 winningBid: result.winningBid!
             });
         }
-        // console.log("Checked: ", auctionId);
+        console.log("Checked: ", auctionId);
+    }
+
+    private async authenticateToken(token: string): Promise<{ userId: number; isAdmin: boolean }> {
+        try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { id: number; role: string };
+            return {
+                userId: decoded.id,
+                isAdmin: decoded.role === 'ADMIN'
+            };
+        } catch (error) {
+            throw new Error('Invalid authentication token');
+        }
+    }
+
+    private handleExistingUserConnection(userId: number, newSocket: AuthenticatedWebSocketClient) {
+        const existingUserSocket = this.userSockets[userId];
+        if (existingUserSocket && !existingUserSocket.socket.isAdmin) {
+            // Disconnect existing socket from all rooms
+            existingUserSocket.rooms.forEach(roomId => {
+                if (this.rooms[roomId]) {
+                    this.rooms[roomId].delete(existingUserSocket.socket);
+                }
+            });
+
+            // Send disconnect message to existing socket
+            existingUserSocket.socket.send(JSON.stringify({
+                type: 'DISCONNECTED',
+                message: 'New connection established from another location'
+            }));
+
+            // Close existing socket
+            existingUserSocket.socket.close();
+        }
+    }
+
+    private joinRoom(socket: AuthenticatedWebSocketClient, auctionId: number) {
+        if (!this.rooms[auctionId]) {
+            this.rooms[auctionId] = new Set();
+        }
+
+        // Add socket to room
+        this.rooms[auctionId].add(socket);
+        socket.auctionId = auctionId;
+
+        // Update user's room membership
+        if (socket.userId) {
+            if (!this.userSockets[socket.userId]) {
+                this.userSockets[socket.userId] = {
+                    socket,
+                    rooms: new Set()
+                };
+            }
+            this.userSockets[socket.userId].rooms.add(auctionId);
+        }
     }
 
     // This is when server starts
@@ -144,75 +204,114 @@ export class WebSocketService {
         });
     }
 
+    private leaveRoom(socket: AuthenticatedWebSocketClient) {
+        if (socket.auctionId && this.rooms[socket.auctionId]) {
+            this.rooms[socket.auctionId].delete(socket);
+
+            // Update user's room membership
+            if (socket.userId && this.userSockets[socket.userId]) {
+                this.userSockets[socket.userId].rooms.delete(socket.auctionId);
+            }
+        }
+    }
+
     private initialize() {
-        this.wss.on('connection', (ws: WebSocketClient, req: IncomingMessage) => {
-            // Custom type to uniquely identify ws client
+        this.wss.on('connection', async (ws: AuthenticatedWebSocketClient, req: IncomingMessage) => {
             ws.clientId = uuidv4();
             const ip = req.socket.address();
 
-            console.log('New connection:', {
-                clientId: ws.clientId,
-                ip,
-                timestamp: new Date().toISOString(),
-            });
+            // Extract token from query string
+            const url = new URL(req.url!, `http://${req.headers.host}`);
+            const token = url.searchParams.get('token');
 
-            ws.on('message', async (message: string) => {
-                try {
-                    const data: WebSocketMessage = JSON.parse(message);
-                    if (!data.auctionId) return;
+            if (!token) {
+                ws.close(1008, 'Missing authentication token');
+                return;
+            }
 
-                    switch (data.type) {
-                        case 'JOIN_ROOM': {
-                            if (!this.rooms[data.auctionId]) {
-                                this.rooms[data.auctionId] = new Set();
+            try {
+                // Authenticate user
+                const { userId, isAdmin } = await this.authenticateToken(token);
+                ws.userId = userId;
+                ws.isAdmin = isAdmin;
+
+                // Handle existing connection for the same user
+                this.handleExistingUserConnection(userId, ws);
+
+                // Update user socket mapping
+                this.userSockets[userId] = {
+                    socket: ws,
+                    rooms: new Set()
+                };
+
+                console.log('New authenticated connection:', {
+                    clientId: ws.clientId,
+                    userId: ws.userId,
+                    isAdmin: ws.isAdmin,
+                    ip,
+                    timestamp: new Date().toISOString(),
+                });
+
+                ws.on('message', async (message: string) => {
+                    try {
+                        const data: WebSocketMessage = JSON.parse(message);
+                        if (!data.auctionId) return;
+
+                        switch (data.type) {
+                            case 'JOIN_ROOM': {
+                                this.joinRoom(ws, data.auctionId);
+                                const auction = await AuctionService.getAuctionWithBids(data.auctionId);
+                                ws.send(JSON.stringify({
+                                    type: 'ROOM_JOINED',
+                                    message: `Successfully joined auction ${data.auctionId}`,
+                                    auction
+                                }));
+                                break;
                             }
 
-                            ws.auctionId = data.auctionId;
-                            this.rooms[data.auctionId].add(ws);
+                            case 'BID': {
+                                // Use authenticated userId for bidding
+                                await this.handleBid({
+                                    ...data,
+                                    bidderId: ws.userId,
+                                    auctionId: ws.auctionId
+                                }, ws);
+                                break;
+                            }
 
-                            const auction = await AuctionService.getAuctionWithBids(data.auctionId);
-                            ws.send(JSON.stringify({
-                                type: 'ROOM_JOINED',
-                                message: `Successfully joined auction ${data.auctionId}`,
-                                auction
-                            }));
-                            break;
-                        }
-
-                        case 'BID': {
-                            await this.handleBid(data, ws);
-                            break;
-                        }
-
-                        case 'LEAVE_ROOM': {
-                            if (ws.auctionId && this.rooms[ws.auctionId]) {
-                                this.rooms[ws.auctionId].delete(ws);
+                            case 'LEAVE_ROOM': {
+                                this.leaveRoom(ws);
                                 ws.send(JSON.stringify({
                                     type: 'ROOM_LEFT',
                                     message: `Successfully left auction ${ws.auctionId}`
                                 }));
+                                break;
                             }
-                            break;
                         }
+                    } catch (error) {
+                        ws.send(JSON.stringify({
+                            type: 'ERROR',
+                            message: error instanceof Error ? error.message : 'Unknown error'
+                        }));
                     }
-                } catch (error) {
-                    ws.send(JSON.stringify({
-                        type: 'ERROR',
-                        message: error instanceof Error ? error.message : 'Unknown error'
-                    }));
-                }
-            });
-
-            ws.on('close', () => {
-                if (ws.auctionId && this.rooms[ws.auctionId]) {
-                    this.rooms[ws.auctionId].delete(ws);
-                }
-                console.log('WebSocket disconnected:', {
-                    clientId: ws.clientId,
-                    ip,
-                    timestamp: new Date().toISOString(),
                 });
-            });
+
+                ws.on('close', () => {
+                    this.leaveRoom(ws);
+                    if (ws.userId) {
+                        delete this.userSockets[ws.userId];
+                    }
+                    console.log('WebSocket disconnected:', {
+                        clientId: ws.clientId,
+                        userId: ws.userId,
+                        ip,
+                        timestamp: new Date().toISOString(),
+                    });
+                });
+
+            } catch (error) {
+                ws.close(1008, 'Authentication failed');
+            }
         });
     }
 }

@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import type { UpdateAuctionDto } from '../types/auction.types';
 import { Decimal } from '@prisma/client/runtime/library';
+import { getWebSocketService } from '../websocket';
 
 const prisma = new PrismaClient();
 
@@ -258,13 +259,15 @@ export const createNewAuction = async (req: Request, res: Response, next: NextFu
         });
 
         // Schedule notifications for the new auction
-        // console.log("Scheduling ws notif...");
-        // console.log(Date.now().toLocaleString());
-        // const wsService = getWebSocketService();
+        console.log("Scheduling ws notif...");
+        console.log(Date.now().toLocaleString());
+
+        const wsService = getWebSocketService();
         // console.log("wsService: ", wsService);
-        // wsService.scheduleNewAuction(auction);
-        // console.log(Date.now().toLocaleString());
-        // console.log("Scheduled ws notif...");
+        wsService.scheduleNewAuction(auction);
+        
+        console.log(Date.now().toLocaleString());
+        console.log("Scheduled ws notif...");
 
         res.status(201).json(auction);
     } catch (error) {

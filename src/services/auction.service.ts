@@ -294,19 +294,20 @@ export class AuctionService {
         // Get highest current bid
         const highestBid = auction.bids[0];
 
-        // Validate based on auction type and bid type
+        // Validate based on auction type and bid type.
+        // No validation for SEALED bids during the auction.
         if (auction.bidType === BidType.OPEN) {
             if (highestBid) {
                 // For English auction, new bid must be higher than current highest
                 if (auction.auctionType === 'ENGLISH' &&
                     new Decimal(amount).lte(highestBid.amount)) {
-                    throw new Error('Bid must be higher than current highest bid');
+                    throw new Error(`Bid must be higher than current highest bid amount $${highestBid.amount}.`);
                 }
 
                 // For Dutch auction, new bid must be lower than current lowest
                 if (auction.auctionType === 'DUTCH' &&
                     new Decimal(amount).gte(highestBid.amount)) {
-                    throw new Error('Bid must be lower than current lowest bid');
+                    throw new Error(`Bid must be lower than current lowest bid amount $${highestBid.amount}.`);
                 }
             }
         }
