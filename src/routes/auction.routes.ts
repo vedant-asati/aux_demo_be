@@ -11,10 +11,12 @@ router.post('/', authMiddleware, auctionController.createNewAuction);
 
 
 // Protected routes
-router.get('/', authMiddleware, adminMiddleware, auctionController.getAllAuctions);
+router.get('/', auctionController.getAllAuctions);
+// router.get('/', authMiddleware, adminMiddleware, auctionController.getAllAuctions);
 router.get('/active', authMiddleware, adminMiddleware, auctionController.getActiveAuctions);
 
-router.get('/:id', authMiddleware, ownerMiddleware, auctionController.getAuctionById);
+// @DEV Fix: Anyone can access for now
+router.get('/:id', auctionController.getAuctionById);
 router.put('/:id', authMiddleware, ownerMiddleware, auctionController.updateAuction);
 router.delete('/:id', authMiddleware, ownerMiddleware, auctionController.deleteAuction);
 

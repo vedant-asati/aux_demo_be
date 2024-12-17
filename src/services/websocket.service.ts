@@ -266,16 +266,19 @@ export class WebSocketService {
                                     message: `Successfully joined auction ${data.auctionId}`,
                                     auction
                                 }));
+                                console.log("Room no ", data.auctionId, " joined by ws.");
                                 break;
                             }
 
                             case 'BID': {
                                 // Use authenticated userId for bidding
+                                console.log("ws trying to place bid in Auction ", data.auctionId, ".");
                                 await this.handleBid({
                                     ...data,
                                     bidderId: ws.userId,
                                     auctionId: ws.auctionId
                                 }, ws);
+                                console.log("Bid successfully placed by ws in Auction ", data.auctionId, ".");
                                 break;
                             }
 
@@ -285,6 +288,7 @@ export class WebSocketService {
                                     type: 'ROOM_LEFT',
                                     message: `Successfully left auction ${ws.auctionId}`
                                 }));
+                                console.log("Room no ", data.auctionId, " left by ws.");
                                 break;
                             }
                         }
