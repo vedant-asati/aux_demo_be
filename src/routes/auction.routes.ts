@@ -13,7 +13,7 @@ router.post('/', authMiddleware, auctionController.createNewAuction);
 // Protected routes
 router.get('/', auctionController.getAllAuctions);
 // router.get('/', authMiddleware, adminMiddleware, auctionController.getAllAuctions);
-router.get('/active', authMiddleware, adminMiddleware, auctionController.getActiveAuctions);
+router.get('/active', auctionController.getActiveAuctions);
 
 // @DEV Fix: Anyone can access for now
 router.get('/:id', auctionController.getAuctionById);
