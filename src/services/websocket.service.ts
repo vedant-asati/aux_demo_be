@@ -64,7 +64,6 @@ export class WebSocketService {
 
     private async handleBid(data: WebSocketMessage, ws: WebSocketClient) {
         if (!data.auctionId || !data.bidderId || !data.amount) {
-            console.log(data);
             throw new Error('Invalid bid data');
         }
 
