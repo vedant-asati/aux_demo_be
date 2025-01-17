@@ -3,7 +3,7 @@
 -- Hash generated using bcrypt with salt 10
 INSERT INTO "User" (id, email, password, name, role, "createdAt", "updatedAt")
 VALUES 
-  (501, 'admin@auctions.com', '$2b$10$R8jAbfeuBXljFg0zxe4Fbe3CeDzIasvMuDuEmPecsnaytX4ysrlj6', 'Admin User', 'ADMIN', NOW(), NOW());
+  (1008, 'admin@auctions.com', '$2b$10$R8jAbfeuBXljFg0zxe4Fbe3CeDzIasvMuDuEmPecsnaytX4ysrlj6', 'Admin User', 'ADMIN', NOW(), NOW());
 
 -- Password for sarah.smith@example.com is: Sarah@123
 INSERT INTO "User" (id, email, password, name, role, "createdAt", "updatedAt")
